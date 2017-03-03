@@ -2,9 +2,10 @@ import psycopg2
 import sys
 import os
 
+
 _BLAST_COMMAND = ("blastp -outfmt 6 -query {org1} -db {org2} " +
                   "-evalue 0.0000000001 -num_threads {n_threads} " +
-                  "| awk '{{print $1,$2}} | sed 's/ /;/g'" +
+                  "| awk '{{print $1,$2}}' | sed 's/ /;/g'" +
                   " > {org1}__{org2}")
 
 
