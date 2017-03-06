@@ -45,7 +45,7 @@ CREATE TABLE directionalhit
   );
 
 DROP TABLE IF EXISTS multiplesequencealignment CASCADE;
- CREATE TABLE multiplesequencealignment
+CREATE TABLE multiplesequencealignment
   (
      msa_id    SERIAL NOT NULL,
      msa       TEXT NOT NULL,

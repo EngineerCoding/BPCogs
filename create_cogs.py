@@ -23,29 +23,7 @@ def handle_blast_arguments():
     return True, "--no-blast-dbs" not in sys.argv, threads
 
 
-def run_organism_loop(organisms, function):
-    for organism1 in organisms:
-        for organism2 in organisms:
-            if organism1 != organism2:
-                function(organism1, organism2)
-
-
-def blast_organisms(organisms):
-    do_blast, make_databases, threads = handle_blast_arguments()
-    if not do_blast:
-        return
-    if make_databases:
-        for organism in organisms:
-            os.system("makeblastdb -in {}.fa -dbtype prot".format(organism))
-
-    def do_blast(org1, org2):
-        os.system(_BLAST_COMMAND.format(org1=org1, org2=org2,
-                                        n_threads=threads))
-
-    run_organism_loop(organisms, do_blast)
-
-
-def direct_hit(org1, org2):
+def write_direct_hits(org1, org2):
     with open("{}_direct_{}".format(org1, org2), "w") as out:
         with open("{}__{}".format(org1, org2)) as infile:
             prev_prot = ""
@@ -55,64 +33,64 @@ def direct_hit(org1, org2):
                     prev_prot = prot1
                     out.write(result_line)
 
+def blast_organisms(organisms):
+    do_blast, make_databases, threads = handle_blast_arguments()
+    if not do_blast:
+        return
+    if make_databases:
+        for organism in organisms:
+            os.system("makeblastdb -in {}.fa -dbtype prot".format(organism))
+    for org1 in organisms:
+        for org2 in organisms:
+            if org1 != org2:
+                os.system(_BLAST_COMMAND.format(org1=org1, org2=org2,
+                                                n_threads=threads))
+                write_direct_hits(org1, org2)
 
-def setup_db():
-    connection = psycopg2.connect(host="localhost", dbname="postgres",
-                                  user="postgres", password="Password")
-    cursor = connection.cursor()
-    with open("../create_tables.sql") as sql:
-        cursor.execute(sql.read())
-    connection.commit()
-    return connection, cursor
+
+def insert_protein(cursor, protein_id, organism_id, protein_name, protein_seq):
+    if not protein_name:
+        return protein_id
+    args = (protein_id, organism_id, protein_name, protein_seq)
+    cursor.execute("INSERT INTO protein (protein_id, name, sequence," +
+                   " organism) VALUES (%s, %s, %s, %s)", args)
+    return protein_id + 1
 
 
-def change_prot_strings(protein2id, organism):
+def write_protein_ids(protein2id, organism):
     for relative in os.listdir(os.getcwd()):
         if (os.path.isfile(relative) and organism in relative and
                     "_direct_" in relative):
             replace_side = int(relative.split("_direct_")[1] == organism)
-            with open(relative + ".tmp", "w") as out:
+            with open(relative + ".ids", "w") as out:
                 with open(relative) as infile:
                     for line in infile:
                         prots = line.strip().split(";")
                         prots[replace_side] = protein2id[prots[replace_side]]
                         out.write(";".join(prots) + "\n")
-            os.remove(relative)
-            os.rename(relative + ".tmp", relative)
 
 
 def fill_protein_table(cursor, organism, org_id, prot_id):
     protein2id = dict()
     last_prot = ""
     last_seq = ""
-    first_run = True
-
-    def insert():
-        cursor.execute("EXECUTE prot_insert (%s, %s, %s)",
-                       (last_prot, last_seq, org_id))
-        protein2id[last_prot.split()[0]] = str(prot_id)
 
     with open(organism + ".fa") as infile:
         for line in infile:
-            if first_run:
-                last_prot = line[1:].strip()
-                last_seq = ""
-                first_run = False
-                continue
             if line[0] == ">":
-                insert()
-                prot_id += 1
+                prot_id = insert_protein(cursor, prot_id, org_id, last_prot,
+                                         last_seq)
                 last_prot = line[1:].strip()
                 last_seq = ""
             else:
                 last_seq += line.strip()
-    insert()
-    change_prot_strings(protein2id, organism)
+    prot_id = insert_protein(cursor, prot_id, org_id, last_prot, last_seq)
+    write_protein_ids(protein2id, organism)
     return prot_id
 
 
 def fill_bidirectional_hits(connection, cursor):
-    os.system("ls *_direct_* | xargs cat > total")
+    os.system("cat *_direct_* > total")
     with open("total") as infile:
         cursor.copy_from(infile, "temporaryhit", sep=";",
                          columns=("protein_a", "protein_b"))
@@ -136,13 +114,14 @@ def fill_database(connection, cursor, organisms):
     cursor.execute(";".join(bulk_insert))
     connection.commit()
     current_id = 1
-    cursor.execute("PREPARE prot_insert AS INSERT INTO protein (name, seque" +
-                   "nce, organism) VALUES ($1, $2, $3)")
     for organism in organisms:
-        current_id = fill_protein_table(cursor, organism,
-                                        organisms.index(organism) + 1,
-                                        current_id)
+        current_id = fill_protein_table(
+            cursor, organism, organisms.index(organism) + 1, current_id)
     fill_bidirectional_hits(connection, cursor)
+
+
+def find_cogs(connection, cursor):
+    pass
 
 
 def main():
@@ -152,9 +131,17 @@ def main():
         organism_list = [organism.strip() for organism in f]
     os.chdir("Project_files")
     blast_organisms(organism_list)
-    run_organism_loop(organism_list, direct_hit)
-    connection, cursor = setup_db()
+
+    connection = psycopg2.connect(host="localhost", dbname="postgres",
+                                  user="postgres", password="Password")
+    cursor = connection.cursor()
+    with open("../create_tables.sql") as sql:
+        cursor.execute(sql.read())
+    connection.commit()
     fill_database(connection, cursor, organism_list)
+    find_cogs(connection, cursor)
+    cursor.close()
+    connection.close()
 
-
-main()
+if __name__ == "__main__":
+    main()
