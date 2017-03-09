@@ -63,21 +63,16 @@ def insert_protein(cursor, protein_id, organism_id, protein_name, protein_seq,
 
 def write_protein_ids(protein2id, organism):
     for file in os.listdir(os.getcwd()):
-        if organism in file and "_direct_" in file and ".ids" not in file:
-            if not os.path.exists(file + ".ids"):
-                with open(file + ".ids", "w") as out:
-                    with open(file) as infile:
-                        for line in infile:
-                            out.write(line)
+        if organism in file and "_direct_" in file:
             replace_side = int(file.split("_direct_")[1] == organism)
-            with open(file + ".ids.tmp", "w") as out:
-                with open(file + ".ids") as infile:
+            with open(file) as infile:
+                with open(file + ".tmp", "w") as outfile:
                     for line in infile:
                         prots = line.strip().split(";")
                         prots[replace_side] = protein2id[prots[replace_side]]
-                        out.write(";".join(prots) + "\n")
-            os.remove(file + ".ids")
-            os.rename(file + ".ids.tmp", file + ".ids")
+                        outfile.write(";".join(prots) + "\n")
+            os.remove(file)
+            os.rename(file + ".tmp", file)
 
 
 def fill_protein_table(cursor, organism, org_id, prot_id):
@@ -101,7 +96,7 @@ def fill_protein_table(cursor, organism, org_id, prot_id):
 
 
 def fill_bidirectional_hits(connection, cursor):
-    os.system("cat *_direct_*.ids > total")
+    os.system("cat *_direct_* > total")
     with open("total") as infile:
         cursor.copy_from(infile, "temporaryhit", sep=";",
                          columns=("protein_a", "protein_b"))
@@ -113,8 +108,8 @@ def fill_bidirectional_hits(connection, cursor):
         "it a INNER JOIN temporaryhit b ON a.protein_a = b.protein_b AND a." +
         "protein_b = b.protein_a) AS combination_set WHERE protein_a < prot" +
         "ein_b")
+    cursor.execute("DROP TABLE temporaryhit CASCADE")
     connection.commit()
-    cursor.execute("DELETE FROM temporaryhit")
 
 
 def fill_database(connection, cursor, organisms):
@@ -143,6 +138,12 @@ def remove_twogs(twogs, remove_containing):
         del twogs[index]
 
 
+def write_twogs(twogs, mode="w"):
+    with open("twogs", mode) as outfile:
+        for twog in twogs:
+            outfile.write(";".join(map(str, twog)) + "\n")
+
+
 def update_cogs(cursor, twogs):
     cursor.execute("SELECT cog, protein_id FROM protein WHERE cog IS NOT NU" +
                    "LL ORDER BY cog DESC")
@@ -152,68 +153,69 @@ def update_cogs(cursor, twogs):
             cog_map[cog] = []
         cog_map[cog].append(protein_id)
     skip_proteins = []
+    delete_twogs = []
     for cog in cog_map:
         cog_proteins = cog_map[cog]
         protein_counter = Counter()
-        for cog_protein in cog_proteins:
-            for twog in twogs:
+        for twog in twogs:
+            for cog_protein in cog_proteins:
                 if cog_protein in twog:
-                    protein_counter.update(twog[1])
+                    index = int(twog[1] != cog_protein)
+                    protein_counter.update(twog[index:index + 1])
+                    delete_twogs.append(cog_protein)
         if len(protein_counter):
             common_protein = protein_counter.most_common(1)[0][0]
             cursor.execute("UPDATE protein SET cog = %s " +
                            "WHERE protein_id = %s", (cog, common_protein))
-            remove_twogs(twogs, [common_protein])
+            remove_twogs(twogs, delete_twogs + [common_protein])
+            delete_twogs.clear()
             skip_proteins.append(common_protein)
     return skip_proteins
 
 
-def new_cogs(cursor, twogs, skip_proteins):
+def new_cogs(cursor, twogs, organism_id, skip_proteins):
     cursor.execute("SELECT MAX(cog_id) FROM cog")
     cog_id = (cursor.fetchone()[0] or 0) + 1
-    available_proteins = set()
-    for twog in twogs:
-        available_proteins.update(twog)
-    for protein_id in available_proteins:
+    cursor.execute("SELECT protein_id FROM protein WHERE organism = %s AND (protein_id IN (SELECT protein_a FROM directionalhit) OR protein_id IN (SELECT protein_b FROM directionalhit))", (organism_id,))
+    for protein_id, in cursor.fetchall():
         if protein_id in skip_proteins:
             continue
         found_twogs = []
         for twog in twogs:
             if protein_id in twog:
-                found_twogs.append(twog[0])
+                index = int(twog[1] != protein_id)
+                found_twogs.append(twog[index])
         hidden_twogs = set()
         for x in found_twogs:
             for y in found_twogs:
-                if (x, y) in twogs and (x, protein_id) in twogs and \
-                                (y, protein_id) in twogs:
+                if (x, y) in twogs or (y, x) in twogs:
                     hidden_twogs.update([x, y, protein_id])
-                    twogs.remove((x, y))
-                    twogs.remove((x, protein_id))
-                    twogs.remove((y, protein_id))
         if len(hidden_twogs):
             cursor.execute("INSERT INTO cog (cog_id) VALUES (%s)", (cog_id,))
             cursor.execute("UPDATE protein SET cog = %s WHERE protein_id IN "
                            + str(tuple(hidden_twogs)), (cog_id,))
+            remove_twogs(twogs, hidden_twogs)
             cog_id += 1
 
 
 def find_cogs(connection, cursor, organisms):
     if os.path.exists("twogs"):
         os.remove("twogs")
-    for organism1 in organisms:
-        for organism2 in organisms:
-            if organism1 != organism2:
-                os.system("cat {}_direct_{}.ids >> twogs"
-                          .format(organism1, organism2))
-        twogs = []
-        with open("twogs", "r") as infile:
-            for line in infile:
-                twogs.append(tuple(line.strip().split(";")))
-        if organisms.index(organism1) > 1:
-            new_cogs(cursor, twogs, update_cogs(cursor, twogs))
-            with open("twogs", "w") as out:
-                for twog in twogs:
-                    out.write(";".join(twog) + "\n")
+    for organism1_id in range(len(organisms)):
+        for organism2_id in range(len(organisms)):
+            if organism1_id > organism2_id:
+                cursor.execute(
+                    "WITH allowed_proteins AS (SELECT protein_id FROM protein WHERE organism IN {}) "
+                    "SELECT protein_a, protein_b FROM directionalhit WHERE protein_a IN (SELECT protein_id FROM allowed_proteins) "
+                    "AND protein_b IN (SELECT protein_id FROM allowed_proteins)".format((organism1_id + 1, organism2_id + 1)))
+                write_twogs(cursor.fetchall(), "a")
+        if organism1_id > 1:
+            twogs = []
+            with open("twogs", "r") as infile:
+                for line in infile:
+                    twogs.append(tuple(map(int, line.strip().split(";"))))
+            new_cogs(cursor, twogs, organism1_id, update_cogs(cursor, twogs))
+            write_twogs(twogs, "w")
             connection.commit()
 
 
