@@ -1,4 +1,5 @@
-from collections import Counter
+from collections import Counter, OrderedDict
+from multiprocessing.pool import ThreadPool
 
 import psycopg2
 import sys
@@ -17,11 +18,8 @@ def handle_blast_arguments():
     threads = 3
     if "--blast-threads" in sys.argv:
         index = sys.argv.index("--blast-threads")
-        if index + 1 < len(sys.argv):
-            try:
-                threads = max(1, int(sys.argv[index + 1]))
-            except ValueError:
-                raise Exception("Invalid argument to --blast-threads")
+        if index + 1 < len(sys.argv) and sys.argv[index + 1].strip().isnumeric():
+            threads = max(1, int(sys.argv[index + 1].strip()))
     return True, "--no-blast-dbs" not in sys.argv, threads
 
 
@@ -154,14 +152,19 @@ def write_twogs(twogs=None, mode="w", organism_id1=-1, organism_id2=-1):
             outfile.write(";".join(map(str, twog)) + "\n")
 
 
-def update_cogs(cursor, twogs):
+def get_cog_proteins(cursor):
     cursor.execute("SELECT cog, protein_id FROM protein WHERE cog IS NOT NU" +
                    "LL ORDER BY cog ASC")
-    cog_map = dict()
+    cog_map = OrderedDict()
     for cog, protein_id in cursor.fetchall():
         if cog not in cog_map:
             cog_map[cog] = []
         cog_map[cog].append(protein_id)
+    return cog_map
+
+
+def update_cogs(cursor, twogs):
+    cog_map = get_cog_proteins(cursor)
     skip_proteins = []
     delete_twogs = []
     for cog in cog_map:
@@ -243,6 +246,67 @@ def find_cogs(connection, cursor, organisms):
             connection.commit()
 
 
+def get_msa(file):
+    msa = OrderedDict()
+    skip_line = True
+    start_index = None
+    with open(file) as infile:
+        for line in infile:
+            if skip_line:
+                skip_line = False
+                continue
+            if len(line) > 1:
+                lines = line.split()
+                if len(lines) == 2:
+                    if lines[0] not in msa:
+                        msa[lines[0]] = ""
+                    msa[lines[0]] += lines[1]
+                    start_index = line.find(lines[1])
+                else:
+                    if "consensus" not in msa:
+                        msa["consensus"] = ""
+                    msa["consensus"] += line[start_index:-1]
+    msa_text = ""
+    for accession, sequence in msa.items():
+        msa_text += '{}{}{}\n'.format(
+            accession, " " * (start_index - len(accession)), sequence)
+    return msa_text
+
+
+def multiple_sequence_alignment(name_sequence_tuple, cog):
+    files = "msa_file{c}.fa tree_file{c}.dnd output{c}.aln".format(c=cog).split()
+    with open(files[0], "w") as outfile:
+        for name, sequence in name_sequence_tuple:
+            outfile.write(">" + name + "\n")
+            for i in range(0, len(sequence), 80):
+                outfile.write(sequence[i:i + 80] + "\n")
+    os.system("clustalw -infile={} -newtree={} -outfile={} -align -quiet"
+              .format(*files))
+    msa_string = get_msa(files[2])
+    for file in files:
+        os.remove(file)
+    return cog, msa_string
+
+
+def do_multiple_sequence_alignments(cursor):
+    arguments = dict()
+    cursor.execute("SELECT name, sequence, cog FROM protein WHERE cog IS N" +
+                   "OT NULLORDER BY cog ASC")
+    for name, sequence, cog in cursor:
+        if cog not in arguments:
+            arguments[cog] = ([], cog)
+        arguments[cog][0].append((name, sequence))
+    msa_threads = 1
+    if '--msa-threads' in sys.argv:
+        index = sys.argv.index('--msa-threads')
+        if index + 1 < len(sys.argv) and sys.argv[index + 1].strip().isnumeric():
+            msa_threads = max(1, int(sys.argv[index + 1].strip()))
+    pool = ThreadPool(msa_threads)
+    msa_vars = pool.starmap(multiple_sequence_alignment, arguments.values())
+    cursor.executemany("INSERT INTO multiplesequencealignment (cog, msa) " +
+                       "VALUES (%s, %s)", msa_vars)
+
+
 def main():
     if not os.path.exists("Project_files/Organismen.txt"):
         raise Exception("Project_files/Organismen.txt does not exist!")
@@ -254,10 +318,12 @@ def main():
                                   user="postgres", password="Password")
     cursor = connection.cursor()
     with open("../create_tables.sql") as sql:
-       cursor.execute(sql.read())
+        cursor.execute(sql.read())
     connection.commit()
     fill_database(connection, cursor, organism_list)
     find_cogs(connection, cursor, organism_list)
+    do_multiple_sequence_alignments(cursor)
+    connection.commit()
     cursor.close()
     connection.close()
 
