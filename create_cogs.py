@@ -13,11 +13,11 @@ _BLAST_COMMAND = ("blastp -outfmt 6 -query {org1}.fa -db {org2}.fa " +
 
 
 def handle_blast_arguments():
-    """ Handles the arguments given on the command line related to the BLAST
-    settings. The different arguments are:
+    """ Handles the arguments given on the command line
+    related to the BLAST settings. The different arguments are:
     --no-blast: marks the algorithm to not execute the BLAST commands
-    --blast-threads <int>: the amount of threads which the BLAST command
-    should be executed with.
+    --blast-threads <int>: the amount of threads which
+    the BLAST command should be executed with.
     --no-blast-dbs: marks the algorithm to not execute the makeblastdb
     commands.
 
@@ -31,7 +31,8 @@ def handle_blast_arguments():
     threads = 3
     if "--blast-threads" in sys.argv:
         index = sys.argv.index("--blast-threads")
-        if index + 1 < len(sys.argv) and sys.argv[index + 1].strip().isnumeric():
+        if index + 1 < len(sys.argv) and \
+                sys.argv[index + 1].strip().isnumeric():
             threads = max(1, int(sys.argv[index + 1].strip()))
     return True, "--no-blast-dbs" not in sys.argv, threads
 
@@ -40,13 +41,15 @@ def write_direct_hits(org1, org2):
     """ Retrieves the first BLAST hit from each protein and writes it
     to another file. The BLAST files have the format {org1}__{org2}
     which contain all the BLAST results for all the proteins from
-    organism 1. Per protein the first result (and thus the best result)
-    is retrieved and written to the {org1}_direct_{org2} file.
+    organism 1. For each protein the first result
+    (and thus the best result) is retrieved and written to
+    the {org1}_direct_{org2} file.
 
     Parameters:
         org1 (string): The name of the first organism
         org2 (string): The name of the second organism
-    Returns: -
+    Returns:
+        -
     """
     with open("{}_direct_{}".format(org1, org2), "w") as out:
         with open("{}__{}".format(org1, org2)) as infile:
@@ -67,8 +70,10 @@ def blast_organisms(organisms):
     BLAST results must be available whether a BLAST is executed or not.
 
     Parameters:
-        organisms (list of string): The organisms which are used in
+        organisms (list of strings): The organisms which are used in
             this COG program.
+    Returns:
+        -
     """
     do_blast, make_databases, threads = handle_blast_arguments()
     if make_databases:
@@ -96,12 +101,12 @@ def insert_protein(cursor, protein_id, organism_id, protein_name, protein_seq,
             should have.
         organism_id (int): The ID of the organism which contains this
             protein.
-        protein_name (string): The name of the protein
-        protein_seq (string): The amino acid sequence
+        protein_name (string): The name of the protein.
+        protein_seq (string): The amino acid sequence.
         protein2id (dictionary): The dictionary which has keys as names
             (practically only the accession) and values as numeric ID's.
     Returns:
-        1. Int: A new protein ID for the next protein
+        1. Int: A new protein ID for the next protein.
     """
     if not protein_name:
         return protein_id
@@ -123,7 +128,9 @@ def write_protein_ids(protein2id, organism):
     Parameters:
         protein2id (dictionary): The dictionary which has keys as names
             (practically only the accession) and values as numeric ID's.
-        organism (string): The name of the organism
+        organism (string): The name of the organism.
+    Returns:
+        -
     """
     for file in os.listdir(os.getcwd()):
         if organism in file and "_direct_" in file:
@@ -147,11 +154,11 @@ def fill_protein_table(cursor, organism, org_id, prot_id):
     Parameters:
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
-        organism (string): The name of the organism
-        org_id (int): The database ID of the organism
-        prot_id (int): The next ID of a protein
+        organism (string): The name of the organism.
+        org_id (int): The database ID of the organism.
+        prot_id (int): The next ID of a protein.
     Returns:
-        1. Int: A new protein ID for the next protein
+        1. Int: A new protein ID for the next protein.
     """
     protein2id = dict()
     last_prot = ""
@@ -182,6 +189,8 @@ def fill_bidirectional_hits(connection, cursor):
             database.
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
+    Returns:
+        -
     """
     os.system("cat *_direct_* > total")
     with open("total") as infile:
@@ -217,6 +226,8 @@ def fill_database(connection, cursor, organisms):
             with.
         organisms (list of string): The organisms which are used in
             this COG program.
+    Returns:
+        -
     """
     bulk_insert = []
     for organism in organisms:
@@ -239,6 +250,8 @@ def remove_twogs(twogs, remove_containing):
         twogs (list): A list of tuples which contain a bidirectional
             hit using protein ID's.
         remove_containing (list of ints): A list of protein ID's.
+    Returns:
+        -
     """
     remove_indices = []
     for index in range(len(twogs)):
@@ -262,8 +275,10 @@ def write_read_twogs(twogs=None, mode="w", organism_id1=-1, organism_id2=-1):
         twogs (list): A list of tuples containing bidirectional hits.
         mode (string): The mode to write to the "twogs" file. Only "a"
             and "w" are permitted.
-        organism_id1 (int): The organism ID of organism 1
-        organism_id2 (int): The organism ID of organism 2
+        organism_id1 (int): The organism ID of organism 1.
+        organism_id2 (int): The organism ID of organism 2.
+    Returns:
+        -
     """
     if twogs is None:
         twogs = []
@@ -274,7 +289,7 @@ def write_read_twogs(twogs=None, mode="w", organism_id1=-1, organism_id2=-1):
                     int, line.strip().split(";")))
                 if ((org_id1, org_id2) == organism_code_tuple
                     or (org_id2, org_id1) == organism_code_tuple):
-                    twogs.append((org_prot1, org_prot2))
+                        twogs.append((org_prot1, org_prot2))
     with open("twogs", mode) as outfile:
         for twog in twogs:
             outfile.write(";".join(map(str, twog)) + "\n")
@@ -288,8 +303,8 @@ def get_cog_proteins(cursor):
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
     Returns:
-        1. A dictionary with keys as cog ID and as values a list of
-        protein ID's.
+        1. Dict: A dictionary with keys as cog ID and as
+        values a list of protein ID's.
     """
     cursor.execute("""
         SELECT cog, protein_id
@@ -306,12 +321,14 @@ def get_cog_proteins(cursor):
 
 def update_cogs(cursor, twogs):
     """ Finds per cog a best matching protein and adds it to that cog.
+
     Parameters:
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
+        twogs (list): A list of tuples containing bidirectional hits.
     Returns:
-        A list of integers which represent protein ID's which should
-        not be used in the 'new_cogs' function.
+        1. List: A list of integers which represent protein ID's
+        which should not be used in the 'new_cogs' function.
     """
     cog_map = get_cog_proteins(cursor)
     skip_proteins = []
@@ -339,14 +356,14 @@ def read_organism_proteins(organism_id, skip_proteins):
     """ Retrieves a set of protein ID's which belong to the given
     organism ID. This reduces the amount of loops which 'new_cogs'
     has to do. Proteins which are not in the bidirectionalhits will
-    never be participating a cog.
+    never be participating in a COG.
 
     Parameters:
-        organism_id (int): The database ID of the organism
+        organism_id (int): The database ID of the organism.
         skip_proteins (list of ints): A list of integers which should
-            are already in cogs according to the function 'update_cogs'
+            are already in cogs according to the function 'update_cogs'.
     Returns:
-        1. A set of protein ID's which are used in 'new_cogs'
+        1. Set: A set of protein ID's which are used in 'new_cogs'.
     """
     proteins = set()
     with open("full_twogs") as infile:
@@ -370,9 +387,11 @@ def new_cogs(cursor, twogs, organism_id, skip_proteins):
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
         twogs (list): A list of tuples containing bidirectional hits.
-        organism_id (int): The database ID of the organism
+        organism_id (int): The database ID of the organism.
         skip_proteins (list of ints): A list of integers which should
             are already in cogs according to the function 'update_cogs'
+    Returns:
+        -
     """
     cursor.execute("SELECT MAX(cog_id) FROM cog")
     cog_id = (cursor.fetchone()[0] or 0) + 1
@@ -403,8 +422,8 @@ def find_cogs(connection, cursor, organisms):
     equal than 3 organism are contained in the twogs, the following
     sequence will happen:
       1. Read the twogs from the twogs file
-      2. call update_cogs
-      3. call new_cogs
+      2. Call update_cogs
+      3. Call new_cogs
       4. Write the twogs to remove the removed twogs completely.
 
     Parameters:
@@ -414,6 +433,8 @@ def find_cogs(connection, cursor, organisms):
             with.
         organisms (list of string): The organisms which are used in
             this COG program.
+    Returns:
+        -
     """
     if os.path.exists("twogs"):
         os.remove("twogs")
@@ -478,18 +499,19 @@ def get_msa(file):
 def multiple_sequence_alignment(name_sequence_tuple, cog):
     """ A function which executes a multiple sequence alignment. First
     the sequence will be written to a file which then can be used by
-    clustalw. When clustalw ran, the function 'get_msa' will parse the
+    ClustalW. When ClustalW ran, the function 'get_msa' will parse the
     alignment file.
 
     Parameters:
         name_sequence_tuple (list): A list of tuples which contain the
-            name of the sequence (0) and the sequence itself (1)
-        cog (int): The cog ID
+            name of the sequence (0) and the sequence itself (1).
+        cog (int): The cog ID.
     Returns:
-        1. Int: the cog ID
-        2. String: the complete multiple sequence alignment
+        1. Int: the cog ID.
+        2. String: the complete multiple sequence alignment.
     """
-    files = "msa_file{c}.fa tree_file{c}.dnd output{c}.aln".format(c=cog).split()
+    files = "msa_file{c}.fa tree_file{c}.dnd output{c}.aln".format(
+        c=cog).split()
     with open(files[0], "w") as outfile:
         for name, sequence in name_sequence_tuple:
             outfile.write(">" + name + "\n")
@@ -515,6 +537,8 @@ def do_multiple_sequence_alignments(cursor):
     Parameters:
         cursor (psycopg2 cursor class): The cursor to execute queries
             with.
+    Returns:
+        -
     """
     arguments = dict()
     cursor.execute("""
@@ -529,7 +553,8 @@ def do_multiple_sequence_alignments(cursor):
     msa_threads = 1
     if '--msa-threads' in sys.argv:
         index = sys.argv.index('--msa-threads')
-        if index + 1 < len(sys.argv) and sys.argv[index + 1].strip().isnumeric():
+        if index + 1 < len(sys.argv) and \
+                sys.argv[index + 1].strip().isnumeric():
             msa_threads = max(1, int(sys.argv[index + 1].strip()))
     pool = ThreadPool(msa_threads)
     msa_vars = pool.starmap(multiple_sequence_alignment, arguments.values())
