@@ -31,8 +31,8 @@ def handle_blast_arguments():
     threads = 3
     if "--blast-threads" in sys.argv:
         index = sys.argv.index("--blast-threads")
-        if index + 1 < len(sys.argv) and \
-                sys.argv[index + 1].strip().isnumeric():
+        if (index + 1 < len(sys.argv) and
+                sys.argv[index + 1].strip().isnumeric()):
             threads = max(1, int(sys.argv[index + 1].strip()))
     return True, "--no-blast-dbs" not in sys.argv, threads
 
@@ -553,8 +553,8 @@ def do_multiple_sequence_alignments(cursor):
     msa_threads = 1
     if '--msa-threads' in sys.argv:
         index = sys.argv.index('--msa-threads')
-        if index + 1 < len(sys.argv) and \
-                sys.argv[index + 1].strip().isnumeric():
+        if (index + 1 < len(sys.argv) and
+                sys.argv[index + 1].strip().isnumeric()):
             msa_threads = max(1, int(sys.argv[index + 1].strip()))
     pool = ThreadPool(msa_threads)
     msa_vars = pool.starmap(multiple_sequence_alignment, arguments.values())
