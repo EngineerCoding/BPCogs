@@ -7,7 +7,7 @@ import os
 
 
 _BLAST_COMMAND = ("blastp -outfmt 6 -query {org1}.fa -db {org2}.fa " +
-                  "-max_target_seqs 1 -num_threads {n_threads} " +
+                  "-evalue 1e-10 -num_threads {n_threads} " +
                   "| awk '{{print $1,$2}}' | sed 's/ /;/g'" +
                   " > {org1}__{org2}")
 
