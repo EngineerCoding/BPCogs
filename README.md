@@ -35,6 +35,21 @@ on the command line:
 |--msa-threads | int: amount of threads | The amount of threads which should be used to create multiple sequence alignments with |
 
 
+The required files to run the script with the current 'Organismen.txt', can be found in the in file 'Proteomes.zip'. This file should be 
+extracted to the Project_files directory. When one also wants to skip the BLAST, the contents of 'blast_results.zip' also should be
+copied to the Project_files directory.
+
+
+The recommended way to run the program, given that BLAST results are already present, is using the following command:
+```
+python3 create_cogs.py --no-blast --msa-threads 4
+```
+
+
+It is possible that the script will result in a error, which is caused by the psycopg2 module. Most likely the credentials of the
+database are incorrect, which need to be edited to have the correct credentials. This is done in the main function of the script.
+Currently the option does not exist to give credentials to the program using the command line.
+
 
 The finding cogs part of this script, follows the same algorithm as the cogs_builder.py with a few improvements:
 * CogUpdate (update_cogs in the new script):
