@@ -2,9 +2,10 @@
 
 This file is meant to be viewed as a Markdown file, as Github displays it. If you are currently not reading
 this file on Github, I would recommend to do so: https://github.com/EngineerCoding/BPCogs-2016-2017/blob/master/README.md.
+Also, in the same directory of this file a PDF version can be found, so no internet has to be wasted to watch this file.
 
 
-The script is based on the 'cogs_builder.py' file as programmed by an intern, but our script, 'create_cogs.py', 
+The script is based on the 'cogs_builder.py' file as programmed by an intern, but our script, 'create_cogs.py',
 will do everything from scratch. The cogs_builder.py script will only find the cogs assuming all the files with
 best directional hits are available.
 
