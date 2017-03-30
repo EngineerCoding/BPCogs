@@ -21,6 +21,8 @@ def handle_blast_arguments():
     --no-blast-dbs: marks the algorithm to not execute the makeblastdb
     commands.
 
+    Parameters:
+        -
     Returns:
         1. Boolean: execute BLAST commands
         2. Boolean: execute makeblastdb commands
@@ -163,7 +165,6 @@ def fill_protein_table(cursor, organism, org_id, prot_id):
     protein2id = dict()
     last_prot = ""
     last_seq = ""
-
     with open(organism + ".fa") as infile:
         for line in infile:
             if line[0] == ">":
